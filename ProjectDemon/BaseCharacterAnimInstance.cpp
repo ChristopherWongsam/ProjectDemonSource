@@ -142,7 +142,7 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float tim
 				if (time > 0.0)
 				{
 					auto T = time - totalTime;
-					if (T > 0.0)
+					if (T >= 0.0)
 					{
 						FSkeletonPoseBoneIndex BoneIndex(0);
 						animSequence->GetBoneTransform(OutAtom, BoneIndex, T, true);

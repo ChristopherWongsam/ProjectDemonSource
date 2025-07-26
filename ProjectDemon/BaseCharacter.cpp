@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
 #include <Kismet/KismetMathLibrary.h>
+#include "C:/UE_5.4/Engine/Plugins/Animation/MotionWarping/Source/MotionWarping/Public/MotionWarpingComponent.h"
 
 void ABaseCharacter::BeginPlay()
 {
@@ -381,4 +382,42 @@ TArray<AActor*> ABaseCharacter::GetActorsFromSphere(UClass* classType, float rad
 	UKismetSystemLibrary::SphereOverlapActors(GetWorld(), sphereSpawnLocation, radius, traceObjectTypes, seekClass, ignoreActors, outActors);
 
 	return outActors;
+}
+
+bool ABaseCharacter::SuggestProjectileVelocityCustomArc(FVector& OutLaunchVelocity, FVector StartPos, FVector EndPos, float GravityScale /*= 0*/, float ArcParam /*= 0.5f */)
+{
+	/* Make sure the start and end aren't the same location */
+	FVector const StartToEnd = EndPos - StartPos;
+	float const StartToEndDist = StartToEnd.Size();
+
+	UWorld const* const World = GEngine->GetWorldFromContextObject(GetWorld(), EGetWorldErrorMode::LogAndReturnNull);
+	if (World && StartToEndDist > UE_KINDA_SMALL_NUMBER)
+	{
+		const float GravityZ = World->GetGravityZ() * GravityScale;
+
+		// choose arc according to the arc param
+		FVector const StartToEndDir = StartToEnd / StartToEndDist;
+		FVector LaunchDir = FMath::Lerp(FVector::UpVector, StartToEndDir, ArcParam).GetSafeNormal();
+
+		// v = sqrt ( g * dx^2 / ( (dx tan(angle) + dz) * 2 * cos(angle))^2 ) )
+
+		FRotator const LaunchRot = LaunchDir.Rotation();
+		float const Angle = FMath::DegreesToRadians(LaunchRot.Pitch);
+
+		float const Dx = StartToEnd.Size2D();
+		float const Dz = StartToEnd.Z;
+		float const NumeratorInsideSqrt = (GravityZ * FMath::Square(Dx) * 0.5f);
+		float const DenominatorInsideSqrt = (Dz - (Dx * FMath::Tan(Angle))) * FMath::Square(FMath::Cos(Angle));
+		float const InsideSqrt = NumeratorInsideSqrt / DenominatorInsideSqrt;
+		if (InsideSqrt >= 0.f)
+		{
+			// there exists a solution
+			float const Speed = FMath::Sqrt(InsideSqrt);	// this is the mag of the vertical component
+			OutLaunchVelocity = LaunchDir * Speed;
+			return true;
+		}
+	}
+
+	OutLaunchVelocity = FVector::ZeroVector;
+	return false;
 }

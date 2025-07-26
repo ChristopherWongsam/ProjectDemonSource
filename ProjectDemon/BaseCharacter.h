@@ -116,6 +116,19 @@ public:
 
 	TArray<AActor*> GetActorsFromSphere(UClass* classType, float radius = 1200.0f, bool enableDebug = false);
 
+	/**
+	* Returns the launch velocity needed for a projectile at rest at StartPos to land on EndPos.
+	* Assumes a medium arc (e.g. 45 deg on level ground). Projectile velocity is variable and unconstrained.
+	* Does no tracing.
+	*
+	* @param OutLaunchVelocity			Returns the launch velocity required to reach the EndPos
+	* @param StartPos					Start position of the simulation
+	* @param EndPos						Desired end location for the simulation
+	* @param OverrideGravityZ			Optional override of WorldGravityZ
+	* @param ArcParam					Change height of arc between 0.0-1.0 where 0.5 is the default medium arc, 0 is up, and 1 is directly toward EndPos.
+	*/
+	bool SuggestProjectileVelocityCustomArc(FVector& OutLaunchVelocity, FVector StartPos, FVector EndPos, float GravityScale = 1.0, float ArcParam = 0.5f);
+
 	void ResetMovementComponentValues();
 
 	UPROPERTY(EditAnywhere, Category = Combat)

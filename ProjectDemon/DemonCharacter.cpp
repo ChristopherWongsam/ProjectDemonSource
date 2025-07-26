@@ -13,6 +13,7 @@
 #include "Enemy.h"
 #include "C:/UE_5.4/Engine/Plugins/FX/Niagara/Source/Niagara/Public/NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 ADemonCharacter::ADemonCharacter()
 {
@@ -75,71 +76,112 @@ void ADemonCharacter::UpdateSpeed(float DeltaTime)
 
 void ADemonCharacter::Mantle(float DeltaTime)
 {
-	if (!getMovementInputReceived())
+
+	if (MainCharacterAnimInstance->Montage_IsActive(MantleMontage))
+	{
+		FVector RootMotionVector = MainCharacterAnimInstance->getRootMotionDataFromActiveMontage();
+		MantleMontage->GetAnimCompositeSection(0).GetLinkedSequence();
+		
+		Log("Mantle Vector: " + RootMotionVector.ToString());
+		return;
+	}
+
+	if (GetInputDirection().Size() == 0.0)
 	{
 		return;
 	}
-	if (GetMesh()->GetAnimInstance()->IsAnyMontagePlaying())
-	{
-		return;
-	}
+	
 	TArray<AActor*> ActorsToIgnore;
 	FVector StartPoint = GetActorLocation();
-	//StartPoint.Z -= 10;
-	FVector EndPoint = StartPoint + GetActorForwardVector() * 50;
+	FVector EndPoint = StartPoint + GetInputDirection() * 1000;
 	FHitResult Result;
-	bool didHit = UKismetSystemLibrary::SphereTraceSingle(this, StartPoint, EndPoint, 30.0, ETraceTypeQuery::TraceTypeQuery1, 
+	bool didHit = UKismetSystemLibrary::LineTraceSingle(this, StartPoint, EndPoint, ETraceTypeQuery::TraceTypeQuery1, 
 		false, ActorsToIgnore, EDrawDebugTrace::None, Result,true);
-	if (didHit)
+
+	// Want actor rotation to be close to input dir to make it look natural
+	if (didHit && FMath::Abs(GetActorRotation().Yaw - GetInputDirection().Rotation().Yaw) < 10.0)
 	{
 		FHitResult WallHit = Result;
-		StartPoint = Result.ImpactPoint + GetActorForwardVector() * GetCapsuleComponent()->GetScaledCapsuleRadius();
-		StartPoint.Z += GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
-		EndPoint = StartPoint;
-		EndPoint.Z -= GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
-
-		FHitResult FloorHit;
-
-		didHit = SphereTrace(StartPoint, EndPoint, 30, ETraceTypeQuery::TraceTypeQuery1, ActorsToIgnore, EDrawDebugTrace::ForOneFrame, FloorHit);
-
-		if (didHit)
+		float playerDistFromHit = FVector::Dist(WallHit.Location, GetActorLocation());
+		if (playerDistFromHit <= 200.0)
 		{
-			if (FloorHit.ImpactPoint.Z < GetActorLocation().Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight() *.25 && 
-				FloorHit.ImpactPoint.Z > GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * .25)
+			StartPoint = Result.ImpactPoint + GetActorForwardVector() * GetCapsuleComponent()->GetScaledCapsuleRadius();
+			StartPoint.Z += GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+			EndPoint = StartPoint;
+			EndPoint.Z -= GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+
+			FHitResult FloorHit;
+
+			didHit = SphereTrace(StartPoint, EndPoint, 30, ETraceTypeQuery::TraceTypeQuery1, ActorsToIgnore, EDrawDebugTrace::ForOneFrame, FloorHit);
+
+			if (didHit)
 			{
-				Log("Can mantle");
+				if (FloorHit.ImpactPoint.Z < GetActorLocation().Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * .25 &&
+					FloorHit.ImpactPoint.Z > GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * .25)
+				{
+					Log("Can mantle");
+				}
+				else
+				{
+					return;
+				}
+				if (!MantleMontage)
+				{
+					return;
+				}
+				GetCharacterMovement()->MovementMode = EMovementMode::MOVE_Flying;
+				GetMovementComponent()->StopMovementImmediately();
+				GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				auto floatInTime = MantleMontage->GetDefaultBlendInTime();
+				auto newLoc = WallHit.ImpactPoint;
+				newLoc.Z += mantleZOffsset;
+
+				auto newRot = WallHit.Normal.Rotation().Yaw + 180;
+				auto playerRot = GetActorRotation();
+				//playerRot.Yaw = newRot;
+
+				GetCameraBoom()->bDoCollisionTest = false;
+
+				FOnMontageEnded BlendOutDelegate;
+
+
+				float delay = PlayMontage(MantleMontage);
+				BlendOutDelegate.BindUObject(this, &ADemonCharacter::MantleEnd);
+				GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, MantleMontage);
+				GetController()->SetIgnoreMoveInput(true);
+				Log("Mantle length is :" + FString::SanitizeFloat(delay));
+				MoveCharacterToRotationAndLocationIninterval(newLoc, playerRot, floatInTime);
 			}
-			else
-			{
-				return;
-			}
-			if (!MantleMontage)
-			{
-				return;
-			}
-			GetCharacterMovement()->MovementMode = EMovementMode::MOVE_Flying;
-			GetMovementComponent()->StopMovementImmediately();
-			GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			auto floatInTime = MantleMontage->GetDefaultBlendInTime();
-			auto newLoc = WallHit.ImpactPoint;
-			newLoc.Z += mantleZOffsset;
-
-			auto newRot = WallHit.Normal.Rotation().Yaw + 180;
-			auto playerRot = GetActorRotation();
-			//playerRot.Yaw = newRot;
-
-			GetCameraBoom()->bDoCollisionTest = false;
-
-			FOnMontageEnded BlendOutDelegate;
-			
-
-			float delay = PlayMontage(MantleMontage);
-			BlendOutDelegate.BindUObject(this, &ADemonCharacter::MantleEnd);
-			GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, MantleMontage);
-
-			Log("Mantle length is :" + FString::SanitizeFloat(delay));
-			MoveCharacterToRotationAndLocationIninterval(newLoc, playerRot, floatInTime);
 		}
+
+		if (playerDistFromHit <= 500.0 && playerDistFromHit > 200.0)
+		{
+			StartPoint = WallHit.Location;
+			StartPoint.Z += 1000;
+			EndPoint = WallHit.Location;
+
+			didHit = SphereTrace(StartPoint, EndPoint, 30.0,ETraceTypeQuery::TraceTypeQuery1, 0, Result);
+
+			if (didHit)
+			{
+				FHitResult FloorCornerHit = Result;
+				if (Result.Location.Z > GetActorLocation().Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight())
+				{
+					Log("EveryBody Jump");
+					
+					FVector LaunchVelocity;
+					FVector LandLocation = FloorCornerHit.Location;
+					LandLocation += GetInputDirection() * (GetCapsuleComponent()->GetScaledCapsuleRadius());
+					LandLocation.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+					SphereTrace(LandLocation, LandLocation, 10.0, ETraceTypeQuery::TraceTypeQuery1,1,Result);
+					float GravityScale = GetCharacterMovement()->GravityScale;
+					SuggestProjectileVelocityCustomArc(LaunchVelocity, GetActorLocation(), LandLocation, GravityScale,0.5);
+					GetController()->SetIgnoreMoveInput(true);
+					LaunchCharacter(LaunchVelocity, true, true);
+				}
+			}
+		}
+		
 	}
 }
 void ADemonCharacter::MantleEnd(UAnimMontage* animMontage, bool bInterrupted)
@@ -152,12 +194,13 @@ void ADemonCharacter::MantleEnd(UAnimMontage* animMontage, bool bInterrupted)
 
 	auto StartPoint = GetActorLocation();
 	StartPoint.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-
+	
 	auto EndPoint = StartPoint;
 	EndPoint.Z -= GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 10;
 	FHitResult Result;
 	bool didHit = SphereTrace(StartPoint, EndPoint, 30, ETraceTypeQuery::TraceTypeQuery1, EDrawDebugTrace::None, Result);
 	GetCameraBoom()->bDoCollisionTest = true;
+	GetController()->SetIgnoreMoveInput(false);
 	if (didHit)
 	{
 		Log("Floor ground hit");
@@ -169,8 +212,6 @@ void ADemonCharacter::MantleEnd(UAnimMontage* animMontage, bool bInterrupted)
 		ResetCollision();
 		return;
 	}
-	
-	MoveCharacterToRotationAndLocationIninterval(newLoc, playerRot, 0.2);
 	ResetCollision();
 }
 void ADemonCharacter::freeflowEnd(UAnimMontage* animMontage, bool bInterrupted)
@@ -182,6 +223,9 @@ void ADemonCharacter::freeflowEnd(UAnimMontage* animMontage, bool bInterrupted)
 
 void ADemonCharacter::StartFreeflow(bool enableDebug)
 {
+	Log("Start ragdoll?");
+	GetMesh()->SetAllBodiesBelowSimulatePhysics("Hips",true);
+	return;
 	if (!bCanGoToNextFreeflow)
 	{
 		return;
@@ -422,7 +466,7 @@ void ADemonCharacter::LeftMouseClick()
 	Log("left mouse click");
 	if (bLeftCtrlButtonIsHeld)
 	{
-		//StartFreeflow();
+		StartFreeflow();
 	}
 	else
 	{
@@ -1049,6 +1093,7 @@ void ADemonCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	Log("Landed");
+	GetController()->ResetIgnoreMoveInput();
 	if (!bIsClimbing)
 	{
 		if (GetInputDirection().Size() > 0)
