@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include <functional>
 #include "BaseCharacter.generated.h"
 
 
@@ -31,6 +32,7 @@ private:
 	float TimeInterpValue = 0.0;
 	float newValueFromChange(float value, float newValue);
 	UAnimMontage* MontageToCancel;
+	int32 moveToUUID;
 public:
 	virtual void BeginPlay() override;
 
@@ -52,10 +54,14 @@ public:
 	/** Modifies log screen color**/
 	virtual void LogScreen(FString log, FLinearColor color = FLinearColor::Blue);
 	void PrintLog(FString log);
-	/*Custom way to play anim montage. Should use this. If there is no valid montage will return -1.0.*/
-	virtual float PlayMontage(UAnimMontage* Montage, FName Section = "Default", float rate = 1.0, bool bEnaleLowerArmAnim = false);
+	/*
+	 Custom way to play anim montage. Should use this. If there is no valid montage will return -1.0. 
+	 If rootMotionScale is set to != 1.0, then it will override montage rootmotion scale that is set in montage.
+	*/
+	virtual float PlayMontage(UAnimMontage* Montage, FName Section = "Default", float rate = 1.0, float setRootMotionScale = 1.0);
 	/*Binds montage to function oncee montage is done. Remeber to make functions UFUNCTION()*/ 
 	void BindMontage(UAnimMontage* Montage, FName functionName);
+	void BindMontage(UAnimMontage* Montage, std::function<void(UAnimMontage*, bool)> func);
 	float BindAndPlayMontage(UAnimMontage* Montage, FName functionName);
 	/*
 	* 
@@ -85,7 +91,9 @@ public:
 	*/
 	bool SphereTraceMulti(FVector StartPoint, FVector EndPoint, float sphereRadius, ETraceTypeQuery traceTypeQuery, int trace, TArray<FHitResult>& HitResults, bool traceComplex = false, bool ignoreSelf = true);
 	//Will move and rotate the character over a certain time
-	void MoveCharacterToRotationAndLocationIninterval(FVector TargetRelativeLocation, FRotator TargetRelativeRotation, float OverTime);
+	void MoveCharacterToRotationAndLocationIninterval(FVector TargetRelativeLocation, FRotator TargetRelativeRotation, float OverTime, FName onEnd = FName());
+	/*Returns whether the action of component movement is active.*/
+	bool getMoveCharacterToIsActive();
 
 	//Will cancel move and rotate the character over a certain time
 	void cancelMoveCharacterToRotationAndLocationIninterval();
@@ -101,6 +109,7 @@ public:
 	float getMontageAnimNotifyTime(const UAnimMontage* Mont, FString notifyName, FString notifyPrefix = "AnimNotify_");
 	// Make sure function is UFUNCTION()
 	void Delay(float duration, FName funcName);
+	void Delay(float duration, std::function<void()> func);
 	void CancelAllDelay();
 	/*Sets whether movment input can cancel the montage or anything. If no montage is passed, then the current active montage will be used. Recommonded to use with anim notify.*/
 	UFUNCTION(BlueprintCallable)
@@ -128,6 +137,8 @@ public:
 	* @param ArcParam					Change height of arc between 0.0-1.0 where 0.5 is the default medium arc, 0 is up, and 1 is directly toward EndPos.
 	*/
 	bool SuggestProjectileVelocityCustomArc(FVector& OutLaunchVelocity, FVector StartPos, FVector EndPos, float GravityScale = 1.0, float ArcParam = 0.5f);
+
+	void setEnableRagdoll(bool enabelRagdoll);
 
 	void ResetMovementComponentValues();
 

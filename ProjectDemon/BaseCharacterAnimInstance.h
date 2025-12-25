@@ -26,7 +26,9 @@ public:
 	float Speed = 0.0f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = MyInstance, meta = (BlueprintProtected = true))
 	float Direction = 0.0f;
-
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = MyInstance, meta = (BlueprintProtected = true))
+	bool bEnableRagdoll = false;
+	void setEnableRagdoll(bool enableRagdoll) { bEnableRagdoll = enableRagdoll; }
 	void Log(FString log, bool printToScreen = true);
 
 	UFUNCTION(BlueprintCallable)

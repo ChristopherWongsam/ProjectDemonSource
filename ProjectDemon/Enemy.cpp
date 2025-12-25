@@ -10,6 +10,7 @@
 #include <Kismet/GameplayStatics.h>
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
 #include "DemonCharacter.h"
+#include "AnimNotifyState/AttackAnimNotifyState.h"
 
 
 void AEnemy::BeginPlay()
@@ -50,7 +51,7 @@ void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	StartHitbox(DeltaTime, true,true);
-	updateCharacterRotationToTarget(DeltaTime);
+	//updateCharacterRotationToTarget(DeltaTime);
 }
 
 void AEnemy::LogScreen(FString log, FLinearColor color)
@@ -89,25 +90,19 @@ bool AEnemy::enemyIsHighlighted()
 float AEnemy::Attack()
 {
 	LogScreen("Attacking Player", FLinearColor::Red);
-	return PlayMontage(LightAttack);
+	return PlayMontage(LightAttackMontage);
 }
 
 void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug)
 {
-	if (!GetIsAttackAnimationPlaying())
-	{
-		if (actorsHit.Num() > 0)
-		{
-			actorsHit.Empty();
-		}
-		return;
-	}
-
 	try
 	{
 		FName SocketName;
 		TArray<FString> AttackTags;
-		
+		if (!EnemyAnimInstance)
+		{
+			return;
+		}
 		TArray<FAnimNotifyEvent> fAnimNotifyEvents = EnemyAnimInstance->ActiveAnimNotifyState;
 
 		if (fAnimNotifyEvents.Num() == 0)
@@ -119,34 +114,36 @@ void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDeb
 
 		for (FAnimNotifyEvent fAnimNotifyEvent : fAnimNotifyEvents)
 		{
-			//Log(fAnimNotifyEvent.NotifyName.ToString());
 			FString notifyName = fAnimNotifyEvent.NotifyName.ToString();
 
-			if (notifyName.Equals("LeftPunchNotifyState"))
+			if (UAttackAnimNotifyState* attackAnimNotifyState = Cast<UAttackAnimNotifyState>(fAnimNotifyEvent.NotifyStateClass))
 			{
-				SocketName = LeftHandSocketName;
-			}
-			if (notifyName.Equals("RightPunchNotifyState"))
-			{
-				SocketName = RightHandSocketName;
-			}
-			if (notifyName.Equals("LeftKickNotifyState"))
-			{
-				SocketName = LeftFootSocketName;
-			}
-			if (notifyName.Equals("RightKickNotifyState"))
-			{
-				SocketName = RightFootSocketName;
-			}
-			if (!SocketName.IsNone())
-			{
-				isFound = true;
-				AttackHitbox(SocketName, true);
-			}
-			if (notifyName.Equals("SwordAttackNotifyState"))
-			{
-				SwordHitbox(this->RightWeaponSocketInitialPoint, this->RightWeaponSocketFinalPoint);
-				isFound = true;
+				EAttackType attackType = attackAnimNotifyState->getAttackType();
+				switch (attackType)
+				{
+				case EAttackType::EAT_LeftPunch:
+					SocketName = LeftHandSocketName;
+					break;
+				case EAttackType::EAT_RightPunch:
+					SocketName = RightHandSocketName;
+					break;
+				case EAttackType::EAT_LeftKick:
+					SocketName = LeftFootSocketName;
+					break;
+				case EAttackType::EAT_RightKick:
+					SocketName = RightFootSocketName;
+					break;
+				case EAttackType::EAT_RightWeapon:
+					SwordHitbox(this->RightWeaponSocketInitialPoint, this->RightWeaponSocketFinalPoint);
+					break;
+				default:
+					break;
+				}
+				isFound = attackType != EAttackType::EAT_None;
+				if (!SocketName.IsNone())
+				{
+					AttackHitbox(SocketName,true);
+				}
 			}
 		}
 
@@ -162,7 +159,7 @@ void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDeb
 	}
 }
 
-void AEnemy::updateCharacterRotationToTarget(float deltaTime, FVector targetLocation, bool enableDebug)
+void AEnemy::updateCharacterRotationToTarget(float deltaTime, float interpSpeed, FVector targetLocation, bool enableDebug)
 {
 	if (!MyPlayerCharacter)
 	{
@@ -178,6 +175,7 @@ void AEnemy::updateCharacterRotationToTarget(float deltaTime, FVector targetLoca
 		newYaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), targetLocation).Yaw;
 	}
 	FRotator newRot(0, newYaw, 0);
+	newRot = UKismetMathLibrary::RInterpTo_Constant(GetActorRotation(), newRot, deltaTime, interpSpeed);
 	SetActorRotation(newRot);
 	
 }
@@ -206,13 +204,14 @@ void AEnemy::AttackHitbox(FName SocketName, bool bEnableDebug)
 	auto end = midPoint;
 	end.Z -= GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 
-	auto radius = 50;
+	auto radius = 25.0;
 
 	FHitResult hitResult;
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
 	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackPoint, AttackPoint, radius,
+		traceObjectTypes, false, actorsToIgnore, bEnableDebug ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None, hitResult, true);
 	if (didHit)
 	{
 		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(hitResult.GetActor()))
@@ -222,7 +221,10 @@ void AEnemy::AttackHitbox(FName SocketName, bool bEnableDebug)
 				actorsHit.Add(enemy);
 				enemy->HitReact(this);
 				Log("Main Character hit");
-				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+				if (bEnableDebug)
+				{
+					DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+				}
 			}
 		}
 	}
@@ -265,30 +267,29 @@ float AEnemy::HitReact(AActor* sender)
 	{
 		StopAnimMontage(GetCurrentMontage());
 	}
+
+	auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), sender->GetActorLocation()).Yaw;
+
+	auto newRot = GetActorRotation();
+	newRot.Yaw = yaw;
+	SetActorRotation(newRot);
+
 	auto vector = GetActorLocation() - sender->GetActorLocation();
 	FName sectionName = "Default";
 	vector.Normalize();
 	vector *= -1;
+
 	if (FVector::DotProduct(GetActorForwardVector(), vector) < FVector::DotProduct(-GetActorForwardVector(), vector))
 	{
-		sectionName = "HitBack";
+		//sectionName = "HitBack";
 	}
+
 	auto hitReactMontage = HitReactMontageArray[index];
 	float T = PlayMontage(hitReactMontage,sectionName);
 	FOnMontageEnded BlendOutDelegate;
 	BlendOutDelegate.BindUObject(this, &AEnemy::HitReactEnd);
 	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, hitReactMontage);
-	if (ACharacter* character = Cast<ACharacter>(sender))
-	{
-		auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), character->GetActorLocation()).Yaw;
-
-		auto newRot = GetActorRotation();
-		newRot.Yaw = yaw;
-		if (sectionName.IsEqual("HitBack"))
-		{
-			newRot.Yaw = character->GetActorRotation().Yaw;
-		}
-	}
+	
 	
 	return T;
 }
@@ -321,5 +322,5 @@ bool AEnemy::GetIsAttackAnimationPlaying()
 	{
 		return false;
 	}
-	return GetCurrentMontage() == LightAttack;
+	return GetCurrentMontage() == LightAttackMontage;
 }

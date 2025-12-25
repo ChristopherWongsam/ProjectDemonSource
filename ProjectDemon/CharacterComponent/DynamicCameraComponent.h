@@ -51,4 +51,5 @@ public:
 
 	AActor* FocusActor;
 		
+	ADemonCharacter* OwningCharacter;
 };

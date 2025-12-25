@@ -138,7 +138,7 @@ public:
 	UPROPERTY(EditAnywhere, category = "Camera")
 	float CameraLagAirSpeed = 0.2;
 
-	void UpdateCamera(float DeltaTime);
+	virtual void UpdateCamera(float DeltaTime);
 
 	float springArmSideLength = 0;
 	float springArmForwardLength = 0;

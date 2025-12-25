@@ -15,11 +15,35 @@ void AEnemyAIController::BeginPlay()
 	{
 		return;
 	}
-	return;
-	if (EnemyBT && Enemy->bEnemyCanAttack)
+	//return;
+	if (!EnemyBT)
 	{
-		RunBehaviorTree(EnemyBT);
-		ACharacter* MyPlayerCharacter = Cast<ACharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
-		GetBlackboardComponent()->SetValueAsObject(TEXT("AttackTarget"), MyPlayerCharacter);
+		return;
 	}
+	RunBehaviorTree(EnemyBT);
+	MyPlayerCharacter = Cast<ACharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
+	GetBlackboardComponent()->SetValueAsObject(TEXT("AttackTarget"), MyPlayerCharacter);
+}
+
+void AEnemyAIController::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	if (!MyPlayerCharacter)
+	{
+		MyPlayerCharacter = Cast<ACharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
+		return;
+	}
+	if (!Enemy)
+	{
+		Enemy = Cast<AEnemy>(GetPawn());
+		return;
+	}
+	if (!EnemyBT)
+	{
+		return;
+	}
+	//UKismetSystemLibrary::PrintString(this, "Running Enemy AI Tick");
+	SetFocus(MyPlayerCharacter);
+	float distanceFromPlayer = Enemy->GetDistanceTo(MyPlayerCharacter);
+	GetBlackboardComponent()->SetValueAsFloat(TEXT("DistanceFromPlayer"), distanceFromPlayer);
 }

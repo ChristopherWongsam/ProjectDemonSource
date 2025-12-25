@@ -14,11 +14,13 @@ class PROJECTDEMON_API AEnemyAIController : public AAIController
 {
 	GENERATED_BODY()
 public:
-
+	UPROPERTY(BlueprintReadOnly)
+	ACharacter* MyPlayerCharacter;
 	UPROPERTY(EditAnywhere)
 	class UBehaviorTree* EnemyBT;
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 	class AEnemy* Enemy;
 

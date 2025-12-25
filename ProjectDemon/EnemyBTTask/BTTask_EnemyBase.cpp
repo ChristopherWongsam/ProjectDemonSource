@@ -3,7 +3,6 @@
 
 #include "BTTask_EnemyBase.h"
 #include "AIController.h"
-#include "Enemy.h"
 #include <Kismet/GameplayStatics.h>
 
 

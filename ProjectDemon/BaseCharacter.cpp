@@ -8,6 +8,9 @@
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
 #include <Kismet/KismetMathLibrary.h>
 #include "C:/UE_5.4/Engine/Plugins/Animation/MotionWarping/Source/MotionWarping/Public/MotionWarpingComponent.h"
+#include "BaseCharacterAnimInstance.h"
+#include "MontageMetaData/RootScaleMetaData.h"
+
 
 void ABaseCharacter::BeginPlay()
 {
@@ -39,6 +42,17 @@ void ABaseCharacter::Delay(float duration, FName funcName)
 {
 	FTimerDelegate Delegate; // Delegate to bind function with parameters
 	Delegate.BindUFunction(this, funcName);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		timerHandler, // handle to cancel timer at a later time
+		Delegate, // function to call on elapsed
+		duration, // float delay until elapsed
+		false); // looping?
+}
+void ABaseCharacter::Delay(float duration, std::function<void()> func)
+{
+	FTimerDelegate Delegate; // Delegate to bind function with parameters
+	Delegate.BindWeakLambda(this, func);
 
 	GetWorld()->GetTimerManager().SetTimer(
 		timerHandler, // handle to cancel timer at a later time
@@ -107,12 +121,24 @@ float ABaseCharacter::getMontageAnimNotifyTime(const UAnimMontage* Mont, FString
 	return Time;
 }
 
-float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float rate, bool bEnaleLowerArmAnim)
+float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float rate, float setRootMotionScale)
 {
 	if (Montage)
 	{
 		bCanCancelAnimMontage = false;
 		CanHitReact = true;
+		float rootMotionScale = setRootMotionScale;
+		if (setRootMotionScale == 1.0)
+		{
+			for (auto metaData : Montage->GetMetaData())
+			{
+				if (auto rootMotionMetaData = Cast<URootScaleMetaData>(metaData))
+				{
+					rootMotionScale = rootMotionMetaData->getAnimRootMotionScale();;
+				}
+			}
+		}
+		SetAnimRootMotionTranslationScale(rootMotionScale);
 		auto T = GetMesh()->GetAnimInstance()->Montage_Play(Montage, rate);
 		GetMesh()->GetAnimInstance()->Montage_JumpToSection(Section, Montage);
 		auto time = Montage->GetSectionLength(Montage->GetSectionIndex(Section));
@@ -134,7 +160,15 @@ void ABaseCharacter::BindMontage(UAnimMontage* Montage, FName functionName)
 		GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
 	}
 }
-
+void ABaseCharacter::BindMontage(UAnimMontage* Montage, std::function<void(UAnimMontage*, bool)> func)
+{
+	if (Montage)
+	{
+		FOnMontageEnded BlendOutDelegate;
+		BlendOutDelegate.BindWeakLambda(this, func);
+		GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
+	}
+}
 float ABaseCharacter::BindAndPlayMontage(UAnimMontage* Montage, FName functionName)
 {
 	if (Montage)
@@ -163,11 +197,20 @@ bool ABaseCharacter::SphereTraceMulti(FVector StartPoint, FVector EndPoint, floa
 	return UKismetSystemLibrary::SphereTraceMulti(this, StartPoint, EndPoint, sphereRadius, traceTypeQuery,
 		traceComplex, actorsToIgnore, (EDrawDebugTrace::Type)trace, HitResults, ignoreSelf);
 }
-void ABaseCharacter::MoveCharacterToRotationAndLocationIninterval(FVector TargetLocation, FRotator TargetRotation, float OverTime)
+void ABaseCharacter::MoveCharacterToRotationAndLocationIninterval(FVector TargetLocation, FRotator TargetRotation, float OverTime, FName onEnd)
 {
 
 	FLatentActionInfo LatentInfo;
 	LatentInfo.CallbackTarget = this;
+	LatentInfo.UUID = GetUniqueID();
+	LatentInfo.Linkage = LatentInfo.UUID;
+	moveToUUID = LatentInfo.UUID;
+	Log("Function to end is: " + onEnd.ToString());
+	if (!onEnd.IsNone())
+	{
+		LatentInfo.ExecutionFunction = onEnd;
+		Log("Executing function on end");
+	}
 
 	auto World = GetWorld();
 	auto Component = GetRootComponent();
@@ -239,10 +282,16 @@ void ABaseCharacter::MoveCharacterToRotationAndLocationIninterval(FVector Target
 		}
 	}
 }
-
+bool ABaseCharacter::getMoveCharacterToIsActive()
+{
+	FLatentActionManager& LatentActionManager = GetWorld()->GetLatentActionManager();
+	auto currentAction = LatentActionManager.FindExistingAction<FInterpolateComponentToAction>(this, moveToUUID);
+	return currentAction != NULL;
+}
 void ABaseCharacter::cancelMoveCharacterToRotationAndLocationIninterval()
 {
 	FLatentActionManager& LatentActionManager = GetWorld()->GetLatentActionManager();
+	auto currentAction = LatentActionManager.FindExistingAction<FInterpolateComponentToAction>(this, moveToUUID);
 }
 ETurnState ABaseCharacter::TurnInPlace(FRotator CameraRotation)
 {
@@ -420,4 +469,12 @@ bool ABaseCharacter::SuggestProjectileVelocityCustomArc(FVector& OutLaunchVeloci
 
 	OutLaunchVelocity = FVector::ZeroVector;
 	return false;
+}
+void ABaseCharacter::setEnableRagdoll(bool enabelRagdoll)
+{
+	UBaseCharacterAnimInstance* baseCharacterAnimInstance = Cast<UBaseCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+	if (baseCharacterAnimInstance)
+	{
+		baseCharacterAnimInstance->setEnableRagdoll(enabelRagdoll);
+	}
 }

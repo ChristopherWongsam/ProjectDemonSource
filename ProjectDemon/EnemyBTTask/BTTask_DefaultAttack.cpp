@@ -7,7 +7,7 @@
 EBTNodeResult::Type UBTTask_DefaultAttack::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
 	Super::ExecuteTask(OwnerComp, NodeMemory);
-	float waitTIme = Enemy->Attack();
+	float waitTIme = GetEnemy()->Attack();
 	OwnerComp.GetBlackboardComponent()->SetValueAsFloat(TEXT("AttackWaitTime"), waitTIme);
 	return EBTNodeResult::Succeeded;
 }

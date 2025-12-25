@@ -24,7 +24,9 @@ enum class EDemonMovementState :uint8
 {
 	MS_Normal UMETA(DisplayName = "Normal"),
 	MS_Jump UMETA(DisplayName = "Jump"),
-	MS_Glide UMETA(DisplayName = "Glide")
+	MS_Glide UMETA(DisplayName = "Glide"),
+	MS_Sprint UMETA(DisplayName = "Sprint"),
+	MS_WallRun UMETA(DisplayName = "WallRun")
 };
 UENUM(BlueprintType)
 enum class ELowerArmState :uint8
@@ -167,6 +169,7 @@ public:
 	void LeftCTRLClickEnd();
 	void LeftMouseClick();
 	void ShiftClick();
+	void ShiftClickEnd();
 	bool bRightMouseButtonIsPressed = false;
 	void RightMouseClick();
 	void RightMouseClickEnd();
@@ -234,16 +237,10 @@ public:
 
 	void UpdateHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug);
 
-	
-
-	
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (BlueprintProtected = true))
 	bool bCycleRunnigJumpMirror = false;
 
 	void StartHitbox(float deltaTime, bool bEnableRightPunch = true, bool enableDebug = false);
-
-	void UpdateHitbox(float deltaTime);
 
 	void AttackHitbox(FName SocketName,bool bEnableDebug = false);
 	
@@ -263,11 +260,25 @@ public:
 	float HitReact(AActor* hitSender);
 	UFUNCTION()
 	void HitReactEnd(UAnimMontage* animMontage, bool bInterrupted);
-
+	int getAttackCombo() { return attackCombo; }
 private:
 	//Makesure for FName to seperate by ','
 	UPROPERTY(EditAnywhere, Category = Combat)
+	USoundBase* PunchSound;
+	UPROPERTY(EditAnywhere, Category = Combat)
+	USoundBase* AttackGrunt;
+	//Makesure for FName to seperate by ','
+	UPROPERTY(EditAnywhere, Category = Combat)
 	TArray<UAnimMontage*> AttackMontageArray;
+
+	//Launcher Attack for character
+	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* LaunchAttackMontage;
+
+	UPROPERTY(EditAnywhere, Category = Combat)
+	float LaunchAttackScale = 1.0;
+
+	int attackCombo = 0;
 
 	//Makesure for FName to seperate by ','
 	UPROPERTY(EditAnywhere, Category = Combat)
@@ -304,7 +315,7 @@ private:
 
 	bool playerCanAttck = true;
 	
-	
+	bool bAttackCacheEnabled = false;
 
 	class AEnemy* playerEnemy = nullptr;
 	TArray< AActor*> actorsHit;
@@ -315,7 +326,10 @@ private:
 public:
 	void StartWallClimb();
 	void EKeyActionPress();
-	void UpdateWallclimb(float DeltaTime);
+	void UpdateWallclimb(float DeltaTime,bool bEnableDebug = false);
+
+	UFUNCTION()
+	void MovementRotationCompleted();
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsClimbing = false;
 private:
@@ -340,5 +354,49 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	EDemonMovementState GetMovementState() { return MovementState; }
+	void SetMovementState(EDemonMovementState movemntState);
 
+public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	FVector HeadLookatLocation;
+	void UpdateHeadLookAtLocation(float DeltaTime);
+
+	void UpdateCableActor(float DeltaTime);
+	/** Cable component for grapple, I guess */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Cable, meta = (AllowPrivateAccess = "true"))
+	class UCableComponent* CableComponent;
+
+	UPROPERTY(EditAnywhere, Category = Grab)
+	UAnimMontage* GrabMontage;
+	UPROPERTY(EditAnywhere, Category = Grab)
+	UAnimMontage* ThrowMontage;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Cable, meta = (AllowPrivateAccess = "true"))
+	class UDynamicCameraComponent* DynamicCameraComponent;
+
+	UPROPERTY(EditAnywhere, Category = WallRun)
+	UAnimMontage* WallRunJumpLedgeMontage;
+
+	UPROPERTY(EditAnywhere, Category = WallRun)
+	UAnimMontage* WallRunJumpEndMontage;
+
+	UPROPERTY(EditAnywhere, Category = WallRun)
+	UAnimMontage* WallRunJumpExitMontage;
+
+
+	float WallRunLedgeJumpCurrentTime = 0.0;
+	float WallRunLedgeJumpTotalTime = 0.0;
+	FVector prevPoint;
+	FVector p0;
+	FVector p1;
+	FVector p2;
+	void UpdateWallRun(float DeltaTime);
+
+	//How fast the character turn to start a movemnt.
+	UPROPERTY(EditAnywhere, Category = Combat)
+	float MovementRotationSpeed = 20.0;
+	UPROPERTY(EditAnywhere, Category = Sprint)
+	float SprintMultiplier = 1.75;
+
+	void UpdateDodge(float DeltaTime);
 };

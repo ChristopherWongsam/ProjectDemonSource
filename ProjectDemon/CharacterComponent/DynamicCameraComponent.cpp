@@ -6,7 +6,9 @@
 #include <Kismet/KismetMathLibrary.h>
 #include"GameFramework/PlayerController.h"
 #include"Camera/CameraComponent.h"
+#include <Kismet/KismetSystemLibrary.h>
 #include "GameFramework/Character.h"
+#include <ProjectDemon/DemonCharacter.h>
 
 // Sets default values for this component's properties
 UDynamicCameraComponent::UDynamicCameraComponent()
@@ -23,7 +25,7 @@ UDynamicCameraComponent::UDynamicCameraComponent()
 void UDynamicCameraComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
+	OwningCharacter = Cast<ADemonCharacter>(GetOwner());
 	// ...
 	
 }
@@ -53,11 +55,15 @@ bool UDynamicCameraComponent::isFocused() const
 void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	/*
-	if (FocusActor)
+	if (!OwningCharacter)
+	{
+		ACharacter* playerchar = UGameplayStatics::GetPlayerCharacter(this, 0);
+		OwningCharacter = Cast<ADemonCharacter>(GetOwner());
+	}
+	if (FocusActor && OwningCharacter)
 	{
 		TArray<AActor*> ToIgnore;
-
+		auto followCamera = OwningCharacter->GetFollowCamera();
 		FHitResult HitResult, HitResult1, HitResult2;
 		auto player = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 		ToIgnore.Add(player);
@@ -89,10 +95,11 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 
 
-		auto PlayerToCameraVect = player->GetActorLocation() - GetActorLocation();
+		auto PlayerToCameraVect = player->GetActorLocation() - followCamera->GetComponentLocation();
+		followCamera->GetComponentRotation();
 		PlayerToCameraVect.Normalize();
-		auto CameraRightVect = UKismetMathLibrary::GetRightVector(UKismetMathLibrary::MakeRotator(0, 0, GetActorRotation().Yaw));
-
+		auto CameraRightVect = UKismetMathLibrary::GetRightVector(UKismetMathLibrary::MakeRotator(0, 0, followCamera->GetComponentRotation().Yaw));
+		followCamera->GetRightVector();
 		Start = loc;
 		ArrowSize = 100;
 		VectorDebugLength = 250;
@@ -101,16 +108,20 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 		if (bEnableDebug)
 		{
-			UKismetSystemLibrary::DrawDebugArrow(this, Start, Start - GetActorRightVector() * VectorDebugLength, ArrowSize, Color, 0.0, VectorDebugThickness);
-			UKismetSystemLibrary::DrawDebugArrow(this, Start, Start + GetActorRightVector() * VectorDebugLength, ArrowSize, Color, 0.0, VectorDebugThickness);
+			UKismetSystemLibrary::DrawDebugArrow(this, Start, Start - followCamera->GetRightVector() * VectorDebugLength, ArrowSize, Color, 0.0, VectorDebugThickness);
+			UKismetSystemLibrary::DrawDebugArrow(this, Start, Start + followCamera->GetRightVector() * VectorDebugLength, ArrowSize, Color, 0.0, VectorDebugThickness);
 		}
 
 
-		auto a = FVector::DotProduct(PlayerToCameraVect, GetActorRightVector());
-		auto b = FVector::DotProduct(PlayerToCameraVect, -1 * GetActorRightVector());
+		auto a = FVector::DotProduct(PlayerToCameraVect, followCamera->GetRightVector());
+		auto b = FVector::DotProduct(PlayerToCameraVect, -1 * followCamera->GetRightVector());
 		int A = FMath::RoundToInt(a);
 		int B = FMath::RoundToInt(b);
+
 		float SideLengthValue = 0.0;
+		float UpLengthValue = 0.0;
+		float BackLengthValue = 0.0;
+
 		if ((FVector::Dist(FocusActor->GetActorLocation(), player->GetActorLocation()) < MaxDistanceToFocus) && 1)
 		{
 			auto Top = MaxDistanceToFocus - FVector::Dist(FocusActor->GetActorLocation(), player->GetActorLocation());
@@ -119,13 +130,14 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		}
 		auto Pos1 = player->GetActorLocation() + (UpVect * CameraUpLength + PlayerToEnemyRightVect * SideLengthValue + PlayerToEnemyBackVect * CameraBackLength);
 		auto Pos2 = player->GetActorLocation() + (UpVect * CameraUpLength + PlayerToEnemyLeftVect * SideLengthValue + PlayerToEnemyBackVect * CameraBackLength);
-		FVector CameraLoc = a < b ?
-			Pos1 :
-			Pos2;
+
+		FVector CameraLoc = a < b ? Pos1 : Pos2;
+
 		if (bEnableDebug)
 		{
 			UKismetSystemLibrary::DrawDebugLine(this, player->GetActorLocation(), CameraLoc, FLinearColor::Red);
 		}
+
 		auto DrawDebugTrace = bEnableDebug ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None;
 
 		bool didHit1 = UKismetSystemLibrary::LineTraceSingle(this, player->GetActorLocation(), Pos1,
@@ -135,10 +147,7 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 		bool didHit = UKismetSystemLibrary::LineTraceSingle(this, player->GetActorLocation(), CameraLoc,
 			ETraceTypeQuery::TraceTypeQuery2, 1, ToIgnore, DrawDebugTrace, HitResult, true);
-		if (didHit && 0)
-		{
-			CameraLoc = HitResult.Location;
-		}
+
 		if (didHit && 1)
 		{
 			CameraLoc = HitResult.Location;
@@ -146,8 +155,8 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 			{
 				if (didHit2)
 				{
-					auto Dist1 = FVector::Dist(HitResult2.Location, GetActorLocation());
-					auto Dist2 = FVector::Dist(HitResult.Location, GetActorLocation());
+					auto Dist1 = FVector::Dist(HitResult2.Location, followCamera->GetComponentLocation());
+					auto Dist2 = FVector::Dist(HitResult.Location, followCamera->GetComponentLocation());
 					if (Dist1 > Dist2)
 					{
 						CameraLoc = HitResult2.Location;
@@ -162,8 +171,8 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 			{
 				if (didHit1)
 				{
-					auto Dist1 = FVector::Dist(HitResult1.Location, GetActorLocation());
-					auto Dist2 = FVector::Dist(HitResult.Location, GetActorLocation());
+					auto Dist1 = FVector::Dist(HitResult1.Location, followCamera->GetComponentLocation());
+					auto Dist2 = FVector::Dist(HitResult.Location, followCamera->GetComponentLocation());
 					if (Dist1 > Dist2)
 					{
 						CameraLoc = HitResult1.Location;
@@ -178,20 +187,21 @@ void UDynamicCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 		}
 
+		auto vloc = UKismetMathLibrary::VInterpTo(followCamera->GetComponentLocation(), CameraLoc, DeltaTime, CameraMovementSpeed);
+		//followCamera->Set
+		auto rot = UKismetMathLibrary::FindLookAtRotation(followCamera->GetComponentLocation(), loc);
 
+		followCamera->SetWorldLocation(vloc);
+		followCamera->SetWorldRotation(rot);
 		if (bEnableDebug)
 		{
 			UKismetSystemLibrary::DrawDebugLine(this, player->GetActorLocation(), CameraLoc, FLinearColor::Blue);
 			UKismetSystemLibrary::DrawDebugSphere(this, CameraLoc, 50.0, 12, FLinearColor::Black);
+			UKismetSystemLibrary::DrawDebugSphere(this, vloc, 50.0, 12, FLinearColor::Blue);
+
 		}
 
-		auto vloc = UKismetMathLibrary::VInterpTo(GetActorLocation(), CameraLoc, DeltaTime, CameraMovementSpeed);
-		SetActorLocation(vloc);
-		auto rot = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), loc);
-		SetActorRotation(rot);
+		
 	}
-	// ...
-	*/
-
 }
 

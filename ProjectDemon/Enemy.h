@@ -36,7 +36,7 @@ public:
 	TArray<UAnimMontage*> HitReactMontageArray;
 	int hitReactionCounter = 0;
 	UPROPERTY(EditAnywhere, Category = Combat)
-	UAnimMontage* LightAttack;
+	UAnimMontage* LightAttackMontage;
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* HeavyAttack;
 	UPROPERTY(EditAnywhere, Category = Combat)
@@ -59,11 +59,12 @@ public:
 	void SwordHitbox(FName SocketInitName, FName SocketFinalName);
 private:
 	bool bEnableCharacterTargetRoataion = false;
-	void updateCharacterRotationToTarget(float deltaTime, FVector targetLocation = FVector(0.0), bool enableDebug = false);
-public:
 	
+public:
+	void updateCharacterRotationToTarget(float deltaTime, float interpSpeed, FVector targetLocation = FVector(0.0), bool enableDebug = false);
+
 	UFUNCTION(BlueprintCallable)
-	void setEnableCharacterToTargetRotation(bool EnableCharacterTargetRoataion) { bEnableCharacterTargetRoataion = EnableCharacterTargetRoataion; }
+	void setEnableCharacterToTargetRotation(bool EnableCharacterTargetRoataion) { bEnableCharacterTargetRoataion = EnableCharacterTargetRoataion;}
 	bool getEnableCharacterTargetRoataion() { return bEnableCharacterTargetRoataion; }
 	
 

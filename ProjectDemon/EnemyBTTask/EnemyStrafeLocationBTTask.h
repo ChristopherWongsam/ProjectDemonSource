@@ -3,20 +3,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "BehaviorTree/Tasks/BTTask_BlackboardBase.h"
-#include "Enemy.h"
-#include "BTTask_EnemyBase.generated.h"
+#include "BTTask_EnemyBase.h"
+#include "EnemyStrafeLocationBTTask.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class PROJECTDEMON_API UBTTask_EnemyBase : public UBTTask_BlackboardBase
+class PROJECTDEMON_API UEnemyStrafeLocationBTTask : public UBTTask_EnemyBase
 {
 	GENERATED_BODY()
-public:
-	class AEnemy* Enemy;
-	ACharacter* MyPlayerCharacter;
 protected:
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 };

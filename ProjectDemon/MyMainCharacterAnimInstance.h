@@ -68,6 +68,7 @@ public:
 		void setEnableMirror(bool EnableMirror);
 	UFUNCTION(BlueprintCallable,BlueprintPure)
 	bool getEnableMirror();
+	int getMontageSectionNumOfFrames(FName sectionName = "Default");
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName BlinkCurve = "EyesClosedCurve";
 	float maxBlinkVal = 1.0;

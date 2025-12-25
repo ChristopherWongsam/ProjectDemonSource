@@ -12,8 +12,8 @@ void ABasicEnemy::BeginPlay()
 void ABasicEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	UpdateHeadFindPlayer(DeltaTime);
-	UpdateMoveToPlayer(DeltaTime);
+	//UpdateHeadFindPlayer(DeltaTime);
+	//UpdateMoveToPlayer(DeltaTime);
 }
 
 void ABasicEnemy::UpdateHeadFindPlayer(float DeltaTime)
@@ -39,7 +39,7 @@ void ABasicEnemy::UpdateHeadFindPlayer(float DeltaTime)
 		{
 			Log("Main Character found");
 			bPlayerFound = true;
-			EnemyController->MoveToActor(hitResult.GetActor(), 20.0);
+			EnemyController->MoveToActor(enemy, 20.0);
 			setEnableCharacterToTargetRotation(true);
 		}
 	}
@@ -56,9 +56,9 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 	}
 
 	float playerToEnemyDistance = FVector::Dist(MyPlayerCharacter->GetActorLocation(), GetActorLocation());
-	float yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
+	//float yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
 	
-	if (playerToEnemyDistance > EnemyRadiusRange)
+	if (playerToEnemyDistance > EnemyAttackRange)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = 500;
 		EnemyController->MoveToActor(MyPlayerCharacter, 1.0);
@@ -71,10 +71,8 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 		EnemyController->StopMovement();
 	}
 
-	if (playerToEnemyDistance <= EnemyRadiusRange)
+	if (playerToEnemyDistance <= EnemyAttackRange)
 	{
-		
-
 		if (!bEnablePlayerRangeDecsion)
 		{
 			return;
@@ -86,48 +84,31 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 			{
 				return;
 			}
-			if (playerToEnemyDistance <= EnemyAttackRange)
-			{
-				if (!EnemyAnimInstance->Montage_IsActive(LightAttack))
-				{
 
-					FRotator newRot = GetActorRotation();
-					newRot.Yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
-					SetActorRotation(newRot);
-					Attack();
-					EnemyController->StopMovement();
-					return;
-				}
-				EnemyController->StopMovement();
-				return;
-			}
+			Log("Hello");
 
-			if (!EnemyAnimInstance->Montage_IsActive(LightAttack) &&
-				!DodgMontageChainMap.Contains(EnemyAnimInstance->GetCurrentActiveMontage()))
+			if (!GetCurrentMontage())
 			{
 				UAnimMontage* dodgeMont = nullptr;
-				//Log("Decision time");
-				bool chance = UKismetMathLibrary::RandomBool();
+				auto chance = UKismetMathLibrary::RandomBool();
 				if (chance)
 				{
-					dodgeMont = DodgeFowLeftMontage;
-				}
-				else
-				{
-					dodgeMont = DodgeFowRightMontage;
+					LogScreen("Playing dodge?");
+					dodgeMont = DodgeMontage;
+					SetAnimRootMotionTranslationScale(0.75);
 				}
 
-				if (dodgeMont && DodgMontageChainMap.Contains(dodgeMont))
-				{
-
-				}
-
-				if (dodgeMont && DodgMontageChainMap.Contains(dodgeMont))
+				if (dodgeMont)
 				{
 					setEnableCharacterToTargetRotation(false);
 					PlayMontage(dodgeMont);
 					EnemyAnimInstance->bindMontageRootMotionModifier(dodgeMont, DodgeMovementScale);
 					BindMontage(dodgeMont, "OnDodgeEnd");
+				}
+				else if (LightAttackMontage)
+				{
+					LogScreen("Enemy Attack?");
+					Attack();
 				}
 				else
 				{
@@ -146,7 +127,8 @@ void ABasicEnemy::OnDodgeEnd(UAnimMontage* Montage, bool interrupted)
 {
 	LogScreen("Dodge end");
 	int chance = UKismetMathLibrary::RandomInteger64InRange(0, 2);
-	setEnableCharacterToTargetRotation(false);
+	//setEnableCharacterToTargetRotation(false);
+	SetAnimRootMotionTranslationScale(1.0);
 
 	float playerToEnemyDistance = 0.0;
 
@@ -162,11 +144,11 @@ void ABasicEnemy::OnDodgeEnd(UAnimMontage* Montage, bool interrupted)
 
 	UAnimMontage* nextMontage = nullptr;
 
-	if (DodgMontageChainMap.Contains(Montage))
+	if (DodgeMontageChainMap.Contains(Montage))
 	{
 		FString montName;
 		Montage->GetName(montName);
-		nextMontage = *DodgMontageChainMap.Find(Montage);
+		nextMontage = *DodgeMontageChainMap.Find(Montage);
 		nextMontage->GetName(montName);
 	}
 
@@ -174,19 +156,18 @@ void ABasicEnemy::OnDodgeEnd(UAnimMontage* Montage, bool interrupted)
 	{
 		FRotator newRot = GetActorRotation();
 		newRot.Yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
-		SetActorRotation(newRot);
-
+		//SetActorRotation(newRot);
+		SetAnimRootMotionTranslationScale(1.25);
 		PlayMontage(nextMontage);
-		EnemyAnimInstance->bindMontageRootMotionModifier(nextMontage, DodgeMovementScale);
 		BindMontage(nextMontage, "OnDodgeEnd");
 	}
 }
 
 float ABasicEnemy::Attack()
 {
-	if (LightAttack)
+	if (LightAttackMontage)
 	{
-		const float T = PlayMontage(LightAttack);
+		const float T = PlayMontage(LightAttackMontage);
 		setCanHitReact(false);
 		return T;
 	}
@@ -212,7 +193,7 @@ FVector ABasicEnemy::GetStrafeLocation()
 }
 bool ABasicEnemy::GetIsAttackAnimationPlaying()
 {
-	return GetCurrentMontage() == LightAttack;
+	return GetCurrentMontage() == LightAttackMontage;
 }
 bool ABasicEnemy::GetIsDodgeAnimationPlaying()
 {
@@ -240,30 +221,38 @@ float ABasicEnemy::HitReact(AActor* sender)
 	{
 		StopAnimMontage(GetCurrentMontage());
 	}
+	int attackCombo = 0;
+	ADemonCharacter* demonCharacter = Cast<ADemonCharacter>(sender);
+
+	if (demonCharacter)
+	{
+		attackCombo = demonCharacter->getAttackCombo();
+	}
+
+	bool chance = UKismetMathLibrary::RandomBool();
+
+	if (chance && bEnableHitReactDodge && attackCombo == 1)
+	{
+		PlayMontage(DodgeMontage);
+		return 0.0;
+	}
+
 	auto vector = GetActorLocation() - sender->GetActorLocation();
 	FName sectionName = "Default";
 	vector.Normalize();
 	vector *= -1;
 	if (FVector::DotProduct(GetActorForwardVector(), vector) < FVector::DotProduct(-GetActorForwardVector(), vector))
 	{
-		sectionName = "HitBack";
+		//sectionName = "HitBack";
 	}
 	auto hitReactMontage = HitReactMontageArray[index];
-	float T = PlayMontage(hitReactMontage, sectionName);
-	FOnMontageEnded BlendOutDelegate;
-	BlendOutDelegate.BindUObject(this, &AEnemy::HitReactEnd);
-	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, hitReactMontage);
-	if (ACharacter* character = Cast<ACharacter>(sender))
-	{
-		auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), character->GetActorLocation()).Yaw;
+	float T = PlayMontage(hitReactMontage, sectionName, 1.0);
+	BindMontage(hitReactMontage, "HitReactEnd");
+	auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), sender->GetActorLocation()).Yaw;
 
-		auto newRot = GetActorRotation();
-		newRot.Yaw = yaw;
-		if (sectionName.IsEqual("HitBack"))
-		{
-			newRot.Yaw = character->GetActorRotation().Yaw;
-		}
-	}
+	auto newRot = GetActorRotation();
+	newRot.Yaw = yaw;
+	SetActorRotation(newRot);
 
 	return T;
 }

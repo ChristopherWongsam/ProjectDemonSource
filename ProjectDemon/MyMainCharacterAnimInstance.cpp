@@ -147,4 +147,36 @@ bool UMyMainCharacterAnimInstance::getEnableMirror()
 	return bEnableMirror;
 }
 
+int  UMyMainCharacterAnimInstance::getMontageSectionNumOfFrames(FName sectionName)
+{
+	UAnimMontage* CurrentMont = GetCurrentActiveMontage();
 
+	CurrentMont->CompositeSections;
+	CurrentMont->GetFrameAtTime(0.0);
+	int index = 0;
+	for (auto section : CurrentMont->CompositeSections)
+	{
+		if (section.SectionName.IsEqual(sectionName))
+		{
+			int currentSlotIndex = index;
+			Log("Current slot index: " + FString::FromInt(currentSlotIndex));
+			if (CurrentMont->CompositeSections.IsValidIndex(currentSlotIndex + 1))
+			{
+				auto nextSection = CurrentMont->CompositeSections[currentSlotIndex + 1];
+				int totalFrames = CurrentMont->GetFrameAtTime(nextSection.GetTime()) -
+					CurrentMont->GetFrameAtTime(section.GetTime());
+				Log("Current montage section time: " + FString::SanitizeFloat(section.GetTime()));
+				Log("Next montage section time: " + FString::SanitizeFloat(nextSection.GetTime()));
+
+				return totalFrames;
+			}
+			else
+			{
+				return CurrentMont->GetFrameAtTime(CurrentMont->GetPlayLength()) -
+					CurrentMont->GetFrameAtTime(section.GetTime());
+			}
+		}
+		index++;
+	}
+	return 0;
+}

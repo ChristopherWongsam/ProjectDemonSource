@@ -41,7 +41,7 @@ class PROJECTDEMON_API ABasicEnemy : public AEnemy
 	UPROPERTY(EditAnywhere, Category = EnemyAiMovement)
 	UAnimMontage* DodgeRightMontage;
 	UPROPERTY(EditAnywhere, Category = EnemyAiMovement)
-	TMap<UAnimMontage*, UAnimMontage*> DodgMontageChainMap;
+	TMap<UAnimMontage*, UAnimMontage*> DodgeMontageChainMap;
 
 
 	UFUNCTION()
@@ -54,6 +54,8 @@ class PROJECTDEMON_API ABasicEnemy : public AEnemy
 	float EnemyJumpAttackRange = 500.0;
 	UPROPERTY(EditAnywhere, Category = EnemyAiMovement)
 	float DodgeMovementScale = 1.0;
+	UPROPERTY(EditAnywhere, Category = HitReaction)
+	float hitBackScale = 1.25;
 	void UpdateMoveToPlayer(float DeltaTime);
 
 	/*Recommend to override. I would not use super.*/
@@ -71,6 +73,9 @@ class PROJECTDEMON_API ABasicEnemy : public AEnemy
 	bool GetIsDodgeAnimationPlaying();
 
 	virtual float HitReact(AActor* sender) override;
+
+	UPROPERTY(EditAnywhere, Category = EnemyHitReaction)
+	bool bEnableHitReactDodge = false;
 
 	UFUNCTION()
 	void OnAttackEnd(UAnimMontage* Montage, bool interrupted);
