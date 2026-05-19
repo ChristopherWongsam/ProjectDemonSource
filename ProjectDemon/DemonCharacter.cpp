@@ -12,13 +12,12 @@
 #include "UObject/UObjectGlobals.h"
 #include "Enemy.h"
 #include "CharacterComponent/DynamicCameraComponent.h"
-#include "C:/UE_5.4/Engine/Plugins/FX/Niagara/Source/Niagara/Public/NiagaraFunctionLibrary.h"
-#include "NiagaraComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "C:/UE_5.4/Engine/Plugins/Runtime/CableComponent/Source/CableComponent/Classes/CableActor.h"
 #include "BezierCurve.h"
-#include <CableComponent.h>
 #include "AnimNotifyState/AttackAnimNotifyState.h"
+#include <NiagaraFunctionLibrary.h>
+#include "CableComponent.h"
+#include "DemonTaskHandler.h"
 
 ADemonCharacter::ADemonCharacter()
 {
@@ -63,6 +62,12 @@ void ADemonCharacter::Tick(float DeltaTime)
 	UpdateDodgeGlide(DeltaTime);
 	UpdateDodge(DeltaTime);
 	UpdateCableActor(DeltaTime);
+	TArray<TFunction<void(float)>> tickFunctions;
+	tickMap.GenerateValueArray(tickFunctions);
+	for (auto func : tickFunctions)
+	{
+		func(DeltaTime);
+	}
 }
 void ADemonCharacter::DrawInput(float DeltaTime)
 {
@@ -198,10 +203,6 @@ void ADemonCharacter::StartFreeflow(bool enableDebug)
 		return;
 	}
 
-
-	TArray<UAnimMontage*> FreeflowAttackMontageArray;
-	FreeflowAttackMontageMap.GenerateKeyArray(FreeflowAttackMontageArray);
-
 	if (FreeflowAttackMontageArray.Num() > 0)
 	{
 		auto randInt = FMath::Rand() % FreeflowAttackMontageArray.Num();
@@ -271,18 +272,7 @@ void ADemonCharacter::UpdatePlayerAttack(float DeltaTime)
 		}
 	}
 }
-float ADemonCharacter::getDistanceFromCharacter(ACharacter* character)
-{
-	if (character)
-	{
-		float capsuleRadius = character->GetCapsuleComponent()->GetScaledCapsuleRadius();
-		float totalDistance = FVector::Dist(GetActorLocation(), character->GetActorLocation());
 
-		return  totalDistance - capsuleRadius;
-	}
-	Log("Not valid character");
-	return -1.0;
-}
 void ADemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -312,6 +302,18 @@ void ADemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 void ADemonCharacter::StartJump()
 {
 	bJumpButtonIsPressed = true;
+	DemonTaskHandler::SubmitTask([this]() {
+		
+		while (bJumpButtonIsPressed)
+		{
+			float delay = 0.1;
+			Log("Holding jump");
+			jumpHeldLength += delay;
+			DemonTaskHandler::ThreadWait(delay);
+		}
+		Log("The jump held length is: " + FString::SanitizeFloat(jumpHeldLength));
+		jumpHeldLength = 0.0;
+	});
 	if (GetIsDodgeAnimationPlaying() || GetIsAttackAnimationPlaying())
 	{
 		if (LaunchAttackMontage)
@@ -339,7 +341,7 @@ void ADemonCharacter::StartJump()
 		}
 	}
 
-	if (JumpStartMontage)
+	if (false)
 	{
 		
 		if (0)
@@ -354,19 +356,19 @@ void ADemonCharacter::StartJump()
 		float time = getMontageAnimNotifyTime(JumpStartMontage, "JumpLaunch");
 		if (time < 0.0)
 		{
-			Super::Jump();
+			//Super::Jump();
 		}
 	}
 	else
 	{
-		Super::Jump();
+		//Super::Jump();
 	}
 }
 void ADemonCharacter::StopJumping()
 {
 	bJumpButtonIsPressed = false;
 	ToggleBoost(false, false);
-	Super::StopJumping();
+	Super::Jump();
 }
 void ADemonCharacter::LeftCTRLClick()
 {
@@ -458,12 +460,46 @@ void ADemonCharacter::LeftMouseClick()
 void ADemonCharacter::ShiftClick()
 {
 	Log("Shift click");
-	PlayerDodge();
+	//PlayerDodge();
 	SetMovementState(EDemonMovementState::MS_Sprint);
+	tickMap.Add("SprintTick", [this](float deltaTime)
+		{
+			if (GetMovementState() == EDemonMovementState::MS_Sprint)
+			{
+				if (GetCurrentMontage() == SprintTurnBackRightMontage || GetCurrentMontage() == SprintTurnBackLeftMontage)
+				{
+					DrawDebugLine(GetWorld(), GetActorLocation(), GetActorLocation() + GetActorForwardVector() * 250,FColor::Red);
+					return;
+				}
+				float MovementSpeed = orignalWalkSpeed * SprintMultiplier;
+				GetCharacterMovement()->MaxWalkSpeed = MovementSpeed;
+
+				ETurnState turnState = TurnInPlace(GetInputDirection().Rotation());
+				if (getSpeed() > 300.0 && turnState != ETurnState::ETS_None)
+				{
+					if (turnState == ETurnState::ETS_RightHalf)
+					{
+						PlayMontage(SprintTurnBackRightMontage);
+					}
+					else if (turnState == ETurnState::ETS_LeftHalf)
+					{
+						PlayMontage(SprintTurnBackLeftMontage);
+					}
+				}
+			}
+		});
 }
 void ADemonCharacter::ShiftClickEnd()
 {
-	Log("Shift click");
+	Log("Shift click End");
+	if (GetMovementState() == EDemonMovementState::MS_Sprint)
+	{
+		SetMovementState(EDemonMovementState::MS_Normal);
+	}
+	if (tickMap.Contains("SprintTick"))
+	{
+		tickMap.Remove("SprintTick");
+	}
 }
 void ADemonCharacter::RightMouseClick()
 {
@@ -649,6 +685,57 @@ void ADemonCharacter::PlayerAttack()
 			return;
 		}
 	}
+	if (FreeflowAttackMontageArray.Num() > 0 && GetInputDirection().Size() > 0.0)
+	{
+		
+		auto actors = GetActorsFromSphere(AEnemy::StaticClass());
+		AEnemy* bestEnemy = playerEnemy;
+		float bestDotProductVal = 0.0;
+		for(auto actor : actors)
+		{
+			if (AEnemy* enemy = Cast<AEnemy>(actor))
+			{
+				if(!bestEnemy)
+				{
+					bestEnemy = enemy;
+					FVector enemyToPlayer = enemy->GetActorLocation() - GetActorLocation();
+					enemyToPlayer.Normalize();
+					bestDotProductVal =  FVector::DotProduct(GetInputDirection(), enemyToPlayer);
+					continue;
+				}
+				FVector enemyToPlayer = enemy->GetActorLocation() - GetActorLocation();
+				enemyToPlayer.Normalize();
+				float currentAngle = FVector::DotProduct(GetInputDirection(), enemyToPlayer);
+				if (currentAngle > bestDotProductVal && enemy != bestEnemy)
+				{
+					bestEnemy = enemy;
+					bestDotProductVal = currentAngle;
+				}
+			}
+		}
+		if (bestEnemy != playerEnemy && bestEnemy)
+		{
+			setTargetLocation(bestEnemy->GetActorLocation());
+			int index = FMath::Rand() % FreeflowAttackMontageArray.Num();
+			FreeflowAttackMontageArray.Find(GetCurrentMontage(), index);
+			index++;
+			index = index % FreeflowAttackMontageArray.Num();
+			if (FreeflowAttackMontageArray.IsValidIndex(index))
+			{
+				auto freeflowMont = FreeflowAttackMontageArray[index];
+				PlayMontage(freeflowMont);
+				BindMontage(freeflowMont, [this](UAnimMontage* mont, bool interrupted) {
+					playerCanAttck = true;
+				});
+				playerCanAttck = false;
+				return;
+			}
+			else
+			{
+				Log("Invalid freeflow index");
+			}
+		}
+	}
 	TArray<UAnimMontage*> AttackArray = AttackMontageArray;
 	int AttackIndex = 0;
 	;	if (AttackArray.Num() == 0)
@@ -754,7 +841,10 @@ void ADemonCharacter::NextAttack()
 void ADemonCharacter::onMoveStarted(const FInputActionValue& Value)
 {
 	Log("Move Started");
-
+	if (MainCharacterAnimInstance->GetCurrentActiveMontage() != nullptr)
+	{
+		return;
+	}
 	FVector2D MovementVector = Value.Get<FVector2D>();
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
@@ -822,12 +912,7 @@ void ADemonCharacter::onMoveEnd(const FInputActionValue& Value)
 	{
 		MainCharacterAnimInstance->StopAllMontages(0.2);
 	}
-	if (GetMovementState() == EDemonMovementState::MS_Sprint)
-	{
-		SetMovementState(EDemonMovementState::MS_Normal);
-	}
-
-
+	
 	//Delay(idleSpringArmDelay, "EnableZoomToChar");
 }
 bool ADemonCharacter::getIsRotationMontPlaying() const
@@ -990,9 +1075,9 @@ void ADemonCharacter::SoftLock(float DeltaTime)
 		return;
 	}
 	float bestAngle = -1.0;
-	AEnemy* selectedEnemy = nullptr;
+	AEnemy* selectedEnemy = playerEnemy;
 	FVector vectToComp = GetActorForwardVector();
-	float bestDistance = 0.0;
+	float bestDistance = getDistanceFromCharacter(selectedEnemy);
 	if (GetInputDirection().Size() > 0.0)
 	{
 		vectToComp = GetInputDirection();
@@ -1001,52 +1086,22 @@ void ADemonCharacter::SoftLock(float DeltaTime)
 	{
 		if (AEnemy* enemy = Cast<AEnemy>(actor))
 		{
+			float distance = getDistanceFromCharacter(enemy);
 			if (!selectedEnemy)
 			{
 				selectedEnemy = enemy;
+				bestDistance = distance;
 				continue;
 			}
 
-			float distance = FVector::Dist(GetActorLocation(), enemy->GetActorLocation());
 			if (distance < bestDistance)
 			{
 				bestDistance = distance;
 				selectedEnemy = enemy;
 			}
-			continue;
-			FVector enemyToCharVect = enemy->GetActorLocation() - GetActorLocation();
-			enemyToCharVect.Normalize();
-
-
-			float dotProduct = FVector::DotProduct(enemyToCharVect, vectToComp);
-			//Log("The dot product is: " + FString::SanitizeFloat(dotProduct));
-			if (dotProduct > bestAngle)
-			{
-				bestAngle = dotProduct;
-				selectedEnemy = enemy;
-			}
 		}
 	}
-	if (!selectedEnemy && playerEnemy)
-	{
-		playerEnemy->enableOutline(false);
-		return;
-	}
-	else if (!selectedEnemy)
-	{
-		//Do nothing
-	}
-	else if (!playerEnemy)
-	{
-		selectedEnemy->enableOutline(true);
-		playerEnemy = selectedEnemy;
-	}
-	else if (selectedEnemy != playerEnemy)
-	{
-		selectedEnemy->enableOutline(true);
-		playerEnemy->enableOutline(false);
-		playerEnemy = selectedEnemy;
-	}
+	playerEnemy = selectedEnemy;
 }
 void ADemonCharacter::PlayerDodge()
 {
@@ -1199,9 +1254,13 @@ void ADemonCharacter::StartHitbox(float deltaTime, bool bEnableRightPunch, bool 
 				}
 
 				isFound = true;
+				if (!SocketName.IsNone())
+				{
+					AttackHitbox(SocketName);
+				}
 			}
 
-			AttackHitbox(SocketName);
+			
 
 		}
 		if (!isFound)
@@ -1251,6 +1310,7 @@ void ADemonCharacter::AttackHitbox(FName SocketName, bool bEnableDebug)
 	radius = 30.0;
 	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackPoint, AttackPoint,
 		radius, traceObjectTypes, false, actorsToIgnore, bEnableDebug ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, hitResult, true);
+	Log(SocketName.ToString());
 	if (didHit)
 	{
 		if (AEnemy* enemy = Cast<AEnemy>(hitResult.GetActor()))
@@ -1262,11 +1322,20 @@ void ADemonCharacter::AttackHitbox(FName SocketName, bool bEnableDebug)
 				attackCombo++;
 				Log("Attack combo: " + FString::FromInt(attackCombo));
 				CancelAllDelay();
+				
 				Delay(2.0, [this]() {
 					attackCombo = 0;
 					Log("Attack combo: " + FString::FromInt(attackCombo));
 				});
-
+				/*
+				CustomTimeDilation = 0.0;
+				enemy->CustomTimeDilation = 0.0;
+				Delay(0.05, [this,enemy]() {
+					CustomTimeDilation = 1.0;
+					enemy->CustomTimeDilation = 1.0;
+					Log("Time Dilation is Restore" );
+				});
+				*/
 				enemy->HitReact(this);
 				//SpawnParticle(HitImpact, hitResult.Location, FRotator::ZeroRotator);
 				// DynamicCameraComponent->SetupFocus(enemy);
@@ -1274,9 +1343,11 @@ void ADemonCharacter::AttackHitbox(FName SocketName, bool bEnableDebug)
 				if (HitNiagraImpact && 1)
 				{
 					float impactScale = 0.5;
-					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitNiagraImpact, enemy->GetActorLocation(),
+					FVector enemLoc = enemy->GetActorLocation();
+					DemonTaskHandler::SubmitTask(ENamedThreads::GameThread, [&](){
+						UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitNiagraImpact, enemLoc,
 						(StartPoint + AttackCenterDist * AttackVector).Rotation(), FVector(hitImpactSize), true, true, ENCPoolMethod::AutoRelease, true);
-
+					});
 				}
 				UGameplayStatics::PlaySoundAtLocation(this, PunchSound, hitResult.Location);
 				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
@@ -1573,13 +1644,13 @@ void ADemonCharacter::UpdateMovementRotation(float DeltaTime)
 		GetCharacterMovement()->MaxWalkSpeed = orignalWalkSpeed;
 	}
 	int forwardDodgeIndex = 0;
-	if (MovementState == EDemonMovementState::MS_Sprint || (DodgeMontageArray.IsValidIndex(forwardDodgeIndex) && DodgeMontageArray[forwardDodgeIndex] == GetCurrentMontage()))
+	if ((DodgeMontageArray.IsValidIndex(forwardDodgeIndex) && DodgeMontageArray[forwardDodgeIndex] == GetCurrentMontage()))
 	{
 		float MovementSpeed = orignalWalkSpeed * SprintMultiplier;
 
 		if (DodgeMontageArray.IsValidIndex(forwardDodgeIndex) && DodgeMontageArray[forwardDodgeIndex] == GetCurrentMontage())
 		{
-			MovementSpeed = orignalWalkSpeed * (SprintMultiplier + .25);
+			MovementSpeed = orignalWalkSpeed * (SprintMultiplier);
 		}
 
 		float DodgeAlpha = 0.0;
@@ -1805,7 +1876,7 @@ bool ADemonCharacter::GetIsFreeflowAnimationPlaying()
 	{
 		return false;
 	}
-	return FreeflowAttackMontageMap.Contains(GetCurrentMontage());
+	return FreeflowAttackMontageArray.Contains(GetCurrentMontage());
 }
 bool ADemonCharacter::GetIsDodgeAnimationPlaying()
 {

@@ -110,6 +110,7 @@ public:
 	// Make sure function is UFUNCTION()
 	void Delay(float duration, FName funcName);
 	void Delay(float duration, std::function<void()> func);
+	void ScheduleAtFixedRate(float rate, TFunction<void()> func, float delay=0.0);
 	void CancelAllDelay();
 	/*Sets whether movment input can cancel the montage or anything. If no montage is passed, then the current active montage will be used. Recommonded to use with anim notify.*/
 	UFUNCTION(BlueprintCallable)
@@ -163,6 +164,8 @@ protected:
 	/**Handles timer for class */
 	FTimerHandle timerHandler;
 
+	TArray<FTimerHandle> timerHandlers;
+
 	float defaultGravityScale;
 	float defaultAirControl;
 
@@ -184,4 +187,7 @@ public:
 	bool bEnableLimbHitBox = false;
 protected:
 	FName limbAttackSocketName = "RightHandSocket";
+public:
+	// Returns distance frokm character with consideration of other characters capsule size;
+	float getDistanceFromCharacter(ACharacter* character);
 };

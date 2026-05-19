@@ -2,36 +2,77 @@
 
 
 #include "RotateToPlayerAnimNotifyState.h"
-#include <ProjectDemon/Enemy.h>
+#include <ProjectDemon/DemonCharacter.h>
+#include <Kismet/GameplayStatics.h>
 
 
 void URotateToPlayerAnimNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
-	AEnemy* enemy = Cast<AEnemy>(MeshComp->GetOwner());
-	if (enemy)
+	if (MeshComp->GetOwner() && MeshComp->GetAnimInstance() && MeshComp->GetAnimInstance()->GetCurrentActiveMontage())
 	{
-		enemy->setEnableCharacterToTargetRotation(true);
+		ADemonCharacter* montageMovementInterface = Cast<ADemonCharacter>(MeshComp->GetOwner());
+		
+		if (montageMovementInterface)
+		{
+			montageMovementInterface->Controller->SetIgnoreMoveInput(true);
+			auto currentMontage = MeshComp->GetAnimInstance()->GetCurrentActiveMontage();
+			MeshComp->GetAnimInstance()->RootMotionMode = ERootMotionMode::IgnoreRootMotion;
+
+			FRotator actorRot = UKismetMathLibrary::FindLookAtRotation(montageMovementInterface->GetActorLocation(), montageMovementInterface->getTargetLocation());
+
+			targetRot = FRotator(0,actorRot.Yaw,0);
+			initialRot = FRotator(0,montageMovementInterface->GetActorRotation().Yaw,0);
+
+			float currentTime = MeshComp->GetAnimInstance()->Montage_GetPosition(currentMontage);
+			
+			int currentTimeFrame = currentMontage->GetFrameAtTime(currentTime);
+			int durationEndTimeFrame = currentMontage->GetFrameAtTime(TotalDuration);
+
+			initTime = currentTime;
+			duration = TotalDuration + initTime;
+		}
 	}
 }
-
-void URotateToPlayerAnimNotifyState::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
-{
-	Super::NotifyEnd(MeshComp, Animation, EventReference);
-	AEnemy* enemy = Cast<AEnemy>(MeshComp->GetOwner());
-	if (enemy)
-	{
-		enemy->setEnableCharacterToTargetRotation(false);
-	}
-}
-
 void URotateToPlayerAnimNotifyState::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float FrameDeltaTime, const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime, EventReference);
-	AEnemy* enemy = Cast<AEnemy>(MeshComp->GetOwner());
-	if (enemy)
+	if (MeshComp->GetOwner())
 	{
-		enemy->setEnableCharacterToTargetRotation(true);
-		enemy->updateCharacterRotationToTarget(FrameDeltaTime, 10.0);
+		ADemonCharacter* montageMovementInterface = Cast<ADemonCharacter>(MeshComp->GetOwner());
+		MeshComp->GetAnimInstance()->RootMotionMode = ERootMotionMode::IgnoreRootMotion;
+		if (montageMovementInterface && MeshComp->GetAnimInstance() && MeshComp->GetAnimInstance()->GetCurrentActiveMontage())
+		{
+			auto currentMontage = MeshComp->GetAnimInstance()->GetCurrentActiveMontage();
+			float currentTime = MeshComp->GetAnimInstance()->Montage_GetPosition(currentMontage);
+
+			if (currentTime > currentMontage->GetDefaultBlendInTime())
+			{
+				float ratio = (currentTime - initTime) / (duration - initTime);
+				if (duration < initTime)
+				{
+					ratio = (currentTime - initTime) / (duration);
+				}
+
+				montageMovementInterface->Log("The ratio for rotation is: " + FString::SanitizeFloat(ratio));
+				FRotator newYaw = UKismetMathLibrary::RLerp(initialRot, targetRot, ratio, true);
+				montageMovementInterface->SetActorRotation(newYaw);
+			}
+		}
+
 	}
 }
+void URotateToPlayerAnimNotifyState::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
+{
+	Super::NotifyEnd(MeshComp, Animation, EventReference);
+	MeshComp->GetAnimInstance()->RootMotionMode = ERootMotionMode::RootMotionFromMontagesOnly;
+
+	ADemonCharacter* montageMovementInterface = Cast<ADemonCharacter>(MeshComp->GetOwner());
+	if (montageMovementInterface && montageMovementInterface->Controller)
+	{
+		montageMovementInterface->Controller->SetIgnoreMoveInput(false);
+		montageMovementInterface->Log("End?");
+	}
+}
+
+

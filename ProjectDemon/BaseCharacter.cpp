@@ -7,7 +7,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
 #include <Kismet/KismetMathLibrary.h>
-#include "C:/UE_5.4/Engine/Plugins/Animation/MotionWarping/Source/MotionWarping/Public/MotionWarpingComponent.h"
 #include "BaseCharacterAnimInstance.h"
 #include "MontageMetaData/RootScaleMetaData.h"
 
@@ -59,6 +58,18 @@ void ABaseCharacter::Delay(float duration, std::function<void()> func)
 		Delegate, // function to call on elapsed
 		duration, // float delay until elapsed
 		false); // looping?
+}
+void ABaseCharacter::ScheduleAtFixedRate(float rate, TFunction<void()> func, float delay)
+{
+	FTimerDelegate Delegate; // Delegate to bind function with parameters
+	Delegate.BindWeakLambda(this, func);
+	FTimerHandle* scheduletimerHandle = new FTimerHandle();
+	GetWorld()->GetTimerManager().SetTimer(
+		timerHandler, // handle to cancel timer at a later time
+		Delegate, // function to call on elapsed
+		rate, // float delay until elapsed
+		true,delay); // looping?
+
 }
 void ABaseCharacter::CancelAllDelay()
 {
@@ -477,4 +488,16 @@ void ABaseCharacter::setEnableRagdoll(bool enabelRagdoll)
 	{
 		baseCharacterAnimInstance->setEnableRagdoll(enabelRagdoll);
 	}
+}
+float ABaseCharacter::getDistanceFromCharacter(ACharacter* character)
+{
+	if (character)
+	{
+		float capsuleRadius = character->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		float totalDistance = FVector::Dist(GetActorLocation(), character->GetActorLocation());
+
+		return  totalDistance - capsuleRadius;
+	}
+	Log("Not valid character");
+	return -1.0;
 }

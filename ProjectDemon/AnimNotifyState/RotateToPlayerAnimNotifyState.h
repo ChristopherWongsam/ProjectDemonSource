@@ -16,4 +16,10 @@ class PROJECTDEMON_API URotateToPlayerAnimNotifyState : public UAnimNotifyState
 	virtual void NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float FrameDeltaTime, const FAnimNotifyEventReference& EventReference) override;
+
+	FRotator initialRot;
+	FRotator targetRot;
+
+	float duration = 0.0;
+	float initTime = 0.0;
 };

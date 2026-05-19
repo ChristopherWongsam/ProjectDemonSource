@@ -48,7 +48,6 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataArray(UAnimMontage* Montage
 	for (auto section : Montage->CompositeSections)
 	{
 
-		FVector BoneLocation;
 		section.GetLinkedSequence();
 		if (const UAnimSequence* animSequence = Cast<UAnimSequence>(section.GetLinkedSequence()))
 		{

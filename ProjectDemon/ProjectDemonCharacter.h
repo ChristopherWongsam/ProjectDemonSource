@@ -113,6 +113,10 @@ public:
 	UAnimMontage* TurnBackLeftMontage;
 	UPROPERTY(EditAnywhere, Category = Movement)
 	UAnimMontage* TurnBackRightMontage;
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* SprintTurnBackRightMontage;
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* SprintTurnBackLeftMontage;
 
 	UPROPERTY(EditAnywhere, Category = Movement)
 	FName TurnCurveName = "CharacterRotationCurve";

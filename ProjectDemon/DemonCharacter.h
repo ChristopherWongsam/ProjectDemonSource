@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ProjectDemonCharacter.h"
+#include "MontageMovementInterface.h"
 #include "Containers/List.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
@@ -46,7 +47,7 @@ enum class EUpperArmState :uint8
  * 
  */
 UCLASS()
-class ADemonCharacter : public AProjectDemonCharacter
+class ADemonCharacter : public AProjectDemonCharacter , public MontageMovementInterface
 {
 	GENERATED_BODY()
 
@@ -57,6 +58,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EDemonMovementState MovementState;
 	ADemonCharacter();
+	TMap<FString, TFunction<void(float)>> tickMap;
 public:
 	/** Left Mouse Action Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
@@ -121,8 +123,7 @@ public:
 
 	void UpdatePlayerAttack(float DeltaTime);
 
-	// Returns distance frokm character with consideration of other characters capsule size;
-	float getDistanceFromCharacter(ACharacter* character);
+	
 
 	UFUNCTION(BlueprintCallable)
 	void PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupted);
@@ -305,7 +306,7 @@ private:
 	UPROPERTY(EditAnywhere, Category = Combat)
 	bool bEnableAttackRush = true;
 	UPROPERTY(EditAnywhere, Category = Combat)
-	TMap<UAnimMontage*, FString> FreeflowAttackMontageMap;
+	TArray<UAnimMontage*> FreeflowAttackMontageArray;
 
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* LauncherMontage;
@@ -320,6 +321,7 @@ private:
 	class AEnemy* playerEnemy = nullptr;
 	TArray< AActor*> actorsHit;
 	bool bJumpButtonIsPressed = false;
+	float jumpHeldLength = 0.0f;
 	bool bCharacterlanded = false;
 	
 
